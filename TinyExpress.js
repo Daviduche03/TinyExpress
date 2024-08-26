@@ -2,137 +2,179 @@ import http from 'http';
 import { parse } from 'querystring';
 import { parse as parseUrl } from 'url';
 
+/**
+ * TinyExpress - a minimalist web framework
+ *
+ * @example
+ * const app = TinyExpress();
+ * app.get('/', (req, res) => {
+ *   res.json({ message: 'Hello World!' });
+ * });
+ * app.listen(3000, () => {
+ *   console.log('Server listening on port 3000');
+ * });
+ */
 function TinyExpress() {
-    const routes = [];
-    const middlewares = [];
+  const routes = [];
+  const middlewares = [];
 
-    const app = (req, res) => {
-        let idx = 0;
+  const app = (req, res) => {
+    let idx = 0;
 
-        res.json = (data) => {
-            
-            res.end(JSON.stringify(data));
-        };
-
-        res.status = (code) => {
-            res.writeHead(code);
-            return res;
-        };
-
-        res.status.json = (data) => {
-            res.writeHead(res.statusCode, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(data));
-        };
-
-        function next() {
-            if (idx < middlewares.length) {
-                middlewares[idx++](req, res, next);
-            } else {
-                handle(req, res);
-            }
-        }
-
-        next();
+    /**
+     * Send a JSON response
+     *
+     * @param {object} data - the data to send
+     * @example
+     * res.json({ message: 'Hello World!' });
+     */
+    res.json = (data) => {
+      res.end(JSON.stringify(data));
     };
 
-    
-
-    router.get = (path, handler) => {
-        routes.push({ path, handler });
+    /**
+     * Set the HTTP status code
+     *
+     * @param {number} code - the status code
+     * @example
+     * res.status(404).end('Not Found');
+     */
+    res.status = (code) => {
+      res.writeHead(code);
+      return res;
     };
 
-    function handle(req, res) {
-        const parsedUrl = parseUrl(req.url, true);
-        req.query = parsedUrl.query.q;
+    /**
+     * Send a JSON response with a status code
+     *
+     * @param {object} data - the data to send
+     * @example
+     * res.status(200).json({ message: 'Hello World!' });
+     */
+    res.status.json = (data) => {
+      res.writeHead(res.statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    };
 
-        for (const route of routes) {
-            const match = matchRoute(route.path, parsedUrl.pathname);
-            if (route.method === req.method && match) {
-                req.params = match.params;
-                return route.handler(req, res);
-            }
-        }
-        res.status(404).end('Not Found');
+    function next() {
+      if (idx < middlewares.length) {
+        middlewares[idx++](req, res, next);
+      } else {
+        handle(req, res);
+      }
     }
 
-    function matchRoute(routePath, requestPath) {
-        
-        const routeSegments = routePath.split('/').filter(Boolean);
-        const requestSegments = requestPath.split('/').filter(Boolean);
+    next();
+  };
 
-        if (routeSegments.length !== requestSegments.length) {
-            return null;
-        }
+  /**
+   * Define a route for the GET method
+   *
+   * @param {string} path - the route path
+   * @param {function} handler - the route handler
+   * @example
+   * app.get('/', (req, res) => {
+   *   res.json({ message: 'Hello World!' });
+   * });
+   */
+  app.get = (path, handler) => {
+    routes.push({ method: 'GET', path, handler });
+  };
 
-        const params = {};
+  /**
+   * Define a route for the POST method
+   *
+   * @param {string} path - the route path
+   * @param {function} handler - the route handler
+   * @example
+   * app.post('/users', (req, res) => {
+   *   res.json({ message: 'User created!' });
+   * });
+   */
+  app.post = (path, handler) => {
+    routes.push({ method: 'POST', path, handler });
+  };
 
-        for (let i = 0; i < routeSegments.length; i++) {
-            if (routeSegments[i].startsWith(':')) {
-                const paramName = routeSegments[i].slice(1);
-                params[paramName] = requestSegments[i];
-            } else if (routeSegments[i] !== requestSegments[i]) {
-                return null;
-            }
-        }
+  /**
+   * Use a middleware function
+   *
+   * @param {function} middleware - the middleware function
+   * @example
+   * app.use(jsonParser);
+   */
+  app.use = (middleware) => {
+    middlewares.push(middleware);
+  };
 
-        return { params };
-    }
+  /**
+   * Start the server
+   *
+   * @param {number} port - the port to listen on
+   * @param {function} callback - the callback function
+   * @example
+   * app.listen(3000, () => {
+   *   console.log('Server listening on port 3000');
+   * });
+   */
+  app.listen = (port, callback) => {
+    return http.createServer(app).listen(port, callback);
+  };
 
-    app.use = (middleware) => {
-        middlewares.push(middleware);
-    };
-
-    app.get = (path, handler) => {
-        routes.push({ method: 'GET', path, handler });
-    };
-
-    app.post = (path, handler) => {
-        routes.push({ method: 'POST', path, handler });
-    };
-
-    app.listen = (port, callback) => {
-        return http.createServer(app).listen(port, callback);
-    };
-
-    return app;
+  return app;
 }
 
-// Middleware to parse JSON bodies
+/**
+ * Middleware to parse JSON bodies
+ *
+ * @example
+ * app.use(jsonParser);
+ */
 export const jsonParser = (req, res, next) => {
-    if (req.headers['content-type'] === 'application/json') {
-        let body = '';
-        req.on('data', chunk => {
-            body += chunk.toString();
-        });
-        req.on('end', () => {
-            try {
-                req.body = JSON.parse(body);
-            } catch (e) {
-                req.body = null;
-            }
-            next();
-        });
-    } else {
-        next();
-    }
+  if (req.headers['content-type'] === 'application/json') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        req.body = JSON.parse(body);
+      } catch (e) {
+        req.body = null;
+      }
+      next();
+    });
+  } else {
+    next();
+  }
 };
 
-// Middleware to parse URL-encoded bodies
+/**
+ * Middleware to parse URL-encoded bodies
+ *
+ * @example
+ * app.use(urlencodedParser);
+ */
 export const urlencodedParser = (req, res, next) => {
-    if (req.headers['content-type'] === 'application/x-www-form-urlencoded') {
-        let body = '';
-        req.on('data', chunk => {
-            body += chunk.toString();
-        });
-        req.on('end', () => {
-            req.body = parse(body);
-            next();
-        });
-    } else {
-        next();
-    }
+  if (req.headers['content-type'] === 'application/x-www-form-urlencoded') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      req.body = parse(body);
+      next();
+    });
+  } else {
+    next();
+  }
 };
 
+/**
+ * Middleware to log requests
+ *
+ * @example
+ * app.use(debug);
+ */
 export const debug = (req, res, next) => {
     console.log(req.method, req.url);
     next();
